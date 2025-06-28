@@ -1,5 +1,5 @@
 # 必要ライブラリのインストール（初回のみ）
-# pip install streamlit requests
+# pip install streamlit requests gtts
 
 import streamlit as st
 import requests
@@ -8,6 +8,8 @@ import os
 from datetime import datetime
 from urllib.parse import quote
 import json
+from gtts import gTTS
+import tempfile
 
 # --- DB 初期化 ---
 def init_db():
@@ -40,30 +42,36 @@ def get_history():
     conn.close()
     return rows
 
-# --- テキスト生成（Pollinations API使用） ---
+# --- テキスト生成（簡易版） ---
 def generate_text(prompt):
     try:
-        # Pollinations Text APIを使用
-        url = "https://text.pollinations.ai/"
-        params = {
-            "prompt": prompt,
-            "model": "mistral"
-        }
-        response = requests.get(url, params=params)
-        if response.status_code == 200:
-            return response.text
-        else:
-            return f"テキスト生成エラー: {response.status_code}"
+        # 厨二病なテキストを生成（簡易版）
+        chunibyo_responses = [
+            f"「{prompt}」という言葉に宿る闇の力が、この世界に新しい物語を紡ぎ出す...",
+            f"君の心に響く「{prompt}」の真意、それは運命の扉を開く鍵となるだろう。",
+            f"「{prompt}」という呪文が解き放つ力、それはこの現実を超越する存在の証。",
+            f"闇の深淵から響く「{prompt}」の響き、それは新たな伝説の始まりを告げる。",
+            f"「{prompt}」という言葉に込められた想い、それはこの世界を変える力となる。"
+        ]
+        import random
+        return random.choice(chunibyo_responses)
     except Exception as e:
-        return f"テキスト生成中にエラーが発生しました: {str(e)}"
+        return f"厨二病な力の解放中にエラーが発生しました: {str(e)}"
 
 # --- 画像生成 ---
 def generate_image_url(prompt):
     return f"https://image.pollinations.ai/prompt/{quote(prompt)}"
 
-# --- 音声合成 URL ---
-def generate_audio_url(prompt):
-    return f"https://text.pollinations.ai/{quote(prompt)}?model=openai-audio&voice=nova"
+# --- 音声合成（gTTS使用） ---
+def generate_audio(text):
+    try:
+        tts = gTTS(text=text, lang='ja', slow=False)
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as fp:
+            tts.save(fp.name)
+            return fp.name
+    except Exception as e:
+        st.error(f"音声生成エラー: {str(e)}")
+        return None
 
 # --- Streamlit UI ---
 st.set_page_config(page_title="厨二病ポエムアプリ", layout="centered")
@@ -77,17 +85,27 @@ if st.button("✨ 厨二病生成！") and prompt:
     with st.spinner("厨二病な力を解放中..."):
         text = generate_text(prompt)
         image_url = generate_image_url(prompt)
-        audio_url = generate_audio_url(prompt)
+        audio_file = generate_audio(text)
         save_prompt(prompt, text)
 
     st.subheader("📝 厨二病テキスト出力")
     st.success(text)
 
     st.subheader("🖼 厨二病画像出力")
-    st.image(image_url, caption="厨二病な画像生成")
+    try:
+        st.image(image_url, caption="厨二病な画像生成")
+    except Exception as e:
+        st.error(f"画像の読み込みに失敗しました: {str(e)}")
+        st.info("画像URL: " + image_url)
 
     st.subheader("🔊 厨二病音声合成")
-    st.audio(audio_url)
+    if audio_file:
+        with open(audio_file, 'rb') as f:
+            st.audio(f.read(), format='audio/mp3')
+        # 一時ファイルを削除
+        os.unlink(audio_file)
+    else:
+        st.error("音声の生成に失敗しました")
 
 st.markdown("---")
 st.subheader("📜 厨二病履歴")
