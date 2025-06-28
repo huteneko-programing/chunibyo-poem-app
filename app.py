@@ -8,106 +8,168 @@ import os
 from datetime import datetime
 from urllib.parse import quote
 import json
-from gtts import gTTS
-import tempfile
+import random
+from typing import Optional, List, Tuple
+from config import *
+from utils import create_temp_audio_file, cleanup_temp_file, validate_prompt, format_timestamp
 
-# --- DB 初期化 ---
-def init_db():
-    conn = sqlite3.connect("history.db")
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS prompts (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    timestamp TEXT,
-                    prompt TEXT,
-                    result TEXT
-                )''')
-    conn.commit()
-    conn.close()
+class DatabaseManager:
+    """データベース管理クラス"""
+    
+    def __init__(self, db_name: str = DATABASE_NAME):
+        self.db_name = db_name
+        self.init_db()
+    
+    def init_db(self):
+        """データベースの初期化"""
+        conn = sqlite3.connect(self.db_name)
+        c = conn.cursor()
+        c.execute('''CREATE TABLE IF NOT EXISTS prompts (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        timestamp TEXT,
+                        prompt TEXT,
+                        result TEXT
+                    )''')
+        conn.commit()
+        conn.close()
+    
+    def save_prompt(self, prompt: str, result: str):
+        """プロンプトと結果を保存"""
+        conn = sqlite3.connect(self.db_name)
+        c = conn.cursor()
+        c.execute("INSERT INTO prompts (timestamp, prompt, result) VALUES (?, ?, ?)",
+                  (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), prompt, result))
+        conn.commit()
+        conn.close()
+    
+    def get_history(self, limit: int = HISTORY_LIMIT) -> List[Tuple[str, str, str]]:
+        """履歴を取得"""
+        conn = sqlite3.connect(self.db_name)
+        c = conn.cursor()
+        c.execute("SELECT timestamp, prompt, result FROM prompts ORDER BY id DESC LIMIT ?", (limit,))
+        rows = c.fetchall()
+        conn.close()
+        return rows
 
-# --- プロンプト保存 ---
-def save_prompt(prompt, result):
-    conn = sqlite3.connect("history.db")
-    c = conn.cursor()
-    c.execute("INSERT INTO prompts (timestamp, prompt, result) VALUES (?, ?, ?)",
-              (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), prompt, result))
-    conn.commit()
-    conn.close()
+class ChunibyoTextGenerator:
+    """厨二病テキスト生成クラス"""
+    
+    def __init__(self):
+        self.chunibyo_templates = CHUNIBYO_TEMPLATES
+    
+    def generate(self, prompt: str) -> str:
+        """厨二病テキストを生成"""
+        try:
+            template = random.choice(self.chunibyo_templates)
+            return template.format(prompt=prompt)
+        except Exception as e:
+            return f"厨二病な力の解放中にエラーが発生しました: {str(e)}"
 
-# --- プロンプト履歴取得 ---
-def get_history():
-    conn = sqlite3.connect("history.db")
-    c = conn.cursor()
-    c.execute("SELECT timestamp, prompt, result FROM prompts ORDER BY id DESC LIMIT 10")
-    rows = c.fetchall()
-    conn.close()
-    return rows
+class ImageGenerator:
+    """画像生成クラス"""
+    
+    def __init__(self, base_url: str = IMAGE_BASE_URL):
+        self.base_url = base_url
+    
+    def generate_url(self, prompt: str) -> str:
+        """画像生成URLを作成"""
+        return f"{self.base_url}{quote(prompt)}"
 
-# --- テキスト生成（簡易版） ---
-def generate_text(prompt):
-    try:
-        # 厨二病なテキストを生成（簡易版）
-        chunibyo_responses = [
-            f"「{prompt}」という言葉に宿る闇の力が、この世界に新しい物語を紡ぎ出す...",
-            f"君の心に響く「{prompt}」の真意、それは運命の扉を開く鍵となるだろう。",
-            f"「{prompt}」という呪文が解き放つ力、それはこの現実を超越する存在の証。",
-            f"闇の深淵から響く「{prompt}」の響き、それは新たな伝説の始まりを告げる。",
-            f"「{prompt}」という言葉に込められた想い、それはこの世界を変える力となる。"
-        ]
-        import random
-        return random.choice(chunibyo_responses)
-    except Exception as e:
-        return f"厨二病な力の解放中にエラーが発生しました: {str(e)}"
+class AudioGenerator:
+    """音声生成クラス"""
+    
+    def __init__(self, lang: str = AUDIO_LANGUAGE, slow: bool = AUDIO_SLOW):
+        self.lang = lang
+        self.slow = slow
+    
+    def generate(self, text: str) -> Optional[str]:
+        """音声ファイルを生成"""
+        return create_temp_audio_file(text, self.lang, self.slow)
 
-# --- 画像生成 ---
-def generate_image_url(prompt):
-    return f"https://image.pollinations.ai/prompt/{quote(prompt)}"
+class ChunibyoApp:
+    """厨二病ポエムアプリのメインクラス"""
+    
+    def __init__(self):
+        self.db_manager = DatabaseManager()
+        self.text_generator = ChunibyoTextGenerator()
+        self.image_generator = ImageGenerator()
+        self.audio_generator = AudioGenerator()
+    
+    def setup_page(self):
+        """ページ設定"""
+        st.set_page_config(page_title=PAGE_TITLE, layout="centered")
+        st.title(f"🎨 {APP_TITLE}")
+    
+    def display_text_output(self, text: str):
+        """テキスト出力を表示"""
+        st.subheader("📝 厨二病テキスト出力")
+        st.success(text)
+    
+    def display_image_output(self, image_url: str):
+        """画像出力を表示"""
+        st.subheader("🖼 厨二病画像出力")
+        try:
+            st.image(image_url, caption="厨二病な画像生成")
+        except Exception as e:
+            st.error(f"画像の読み込みに失敗しました: {str(e)}")
+            st.info("画像URL: " + image_url)
+    
+    def display_audio_output(self, audio_file: Optional[str]):
+        """音声出力を表示"""
+        st.subheader("🔊 厨二病音声合成")
+        if audio_file:
+            with open(audio_file, 'rb') as f:
+                st.audio(f.read(), format='audio/mp3')
+            # 一時ファイルを削除
+            cleanup_temp_file(audio_file)
+        else:
+            st.error("音声の生成に失敗しました")
+    
+    def display_history(self):
+        """履歴を表示"""
+        st.markdown("---")
+        st.subheader("📜 厨二病履歴")
+        for timestamp, prompt, result in self.db_manager.get_history():
+            formatted_timestamp = format_timestamp(timestamp)
+            st.markdown(f"- {formatted_timestamp} - **{prompt}** → {result[:50]}...")
+    
+    def run(self):
+        """アプリを実行"""
+        self.setup_page()
+        
+        # プロンプト入力
+        prompt = st.text_input(
+            "厨二病なプロンプトを入力してください", 
+            placeholder=PLACEHOLDER_TEXT
+        )
+        
+        # 生成ボタン
+        if st.button(BUTTON_TEXT) and prompt:
+            if not validate_prompt(prompt):
+                st.error("プロンプトが短すぎます。もう少し詳しく入力してください。")
+                return
+                
+            with st.spinner(LOADING_TEXT):
+                # 各機能を実行
+                text = self.text_generator.generate(prompt)
+                image_url = self.image_generator.generate_url(prompt)
+                audio_file = self.audio_generator.generate(text)
+                
+                # データベースに保存
+                self.db_manager.save_prompt(prompt, text)
+                
+                # 結果を表示
+                self.display_text_output(text)
+                self.display_image_output(image_url)
+                self.display_audio_output(audio_file)
+        
+        # 履歴を表示
+        self.display_history()
 
-# --- 音声合成（gTTS使用） ---
-def generate_audio(text):
-    try:
-        tts = gTTS(text=text, lang='ja', slow=False)
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as fp:
-            tts.save(fp.name)
-            return fp.name
-    except Exception as e:
-        st.error(f"音声生成エラー: {str(e)}")
-        return None
+def main():
+    """メイン関数"""
+    app = ChunibyoApp()
+    app.run()
 
-# --- Streamlit UI ---
-st.set_page_config(page_title="厨二病ポエムアプリ", layout="centered")
-st.title("🎨 厨二病ポエムアプリ")
-
-init_db()
-
-prompt = st.text_input("厨二病なプロンプトを入力してください", placeholder="例: 闇の力を宿した剣士が月明かりの下で戦う")
-
-if st.button("✨ 厨二病生成！") and prompt:
-    with st.spinner("厨二病な力を解放中..."):
-        text = generate_text(prompt)
-        image_url = generate_image_url(prompt)
-        audio_file = generate_audio(text)
-        save_prompt(prompt, text)
-
-    st.subheader("📝 厨二病テキスト出力")
-    st.success(text)
-
-    st.subheader("🖼 厨二病画像出力")
-    try:
-        st.image(image_url, caption="厨二病な画像生成")
-    except Exception as e:
-        st.error(f"画像の読み込みに失敗しました: {str(e)}")
-        st.info("画像URL: " + image_url)
-
-    st.subheader("🔊 厨二病音声合成")
-    if audio_file:
-        with open(audio_file, 'rb') as f:
-            st.audio(f.read(), format='audio/mp3')
-        # 一時ファイルを削除
-        os.unlink(audio_file)
-    else:
-        st.error("音声の生成に失敗しました")
-
-st.markdown("---")
-st.subheader("📜 厨二病履歴")
-for t, p, r in get_history():
-    st.markdown(f"- {t} - **{p}** → {r[:50]}...") 
+if __name__ == "__main__":
+    main() 
