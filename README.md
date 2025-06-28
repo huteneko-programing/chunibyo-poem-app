@@ -4,9 +4,9 @@ Pollinations AIを使用した複合生成アプリです。テキスト、画�
 
 ## 機能
 
-- 📝 AIテキスト生成（Mistralモデル使用）
+- 📝 AIテキスト生成（Pollinations API使用）
 - 🖼 AI画像生成（Pollinations API使用）
-- 🔊 AI音声合成（OpenAI Audio使用）
+- 🔊 AI音声合成（Pollinations API使用）
 - 💾 プロンプト履歴の保存（SQLite使用）
 
 ## セットアップ
@@ -36,14 +36,14 @@ streamlit run app.py
 
 ## 使用方法
 
-1. プロンプトを入力
-2. 「✨ 生成！」ボタンをクリック
+1. 厨二病なプロンプトを入力
+2. 「✨ 厨二病生成！」ボタンをクリック
 3. テキスト、画像、音声が同時に生成されます
 4. 履歴は自動的に保存されます
 
 ## 技術スタック
 
 - Streamlit
-- Pollinations AI
+- Pollinations API（直接呼び出し）
 - SQLite
 - Python 3.9+
